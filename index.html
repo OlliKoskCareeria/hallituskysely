@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8" />
+<title>Hallitusarviointi — Interaktiivinen</title>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+
+
+
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    margin: 20px;
+    line-height: 1.4;
+  }
+
+  header { margin-bottom: 12px; }
+  h1 { margin: 0 0 6px 0; font-size: 20px; }
+  #meta { color: #555; margin-bottom: 12px; }
+
+  #main {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+  }
+
+  /* chart-container määritys*/
+  #chart-container {
+    width: 50vw;
+    min-width: 260px;
+    max-width: 520px;
+    height: min(60vh, 520px); 
+    background: #fafafa;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    padding: 10px;
+  }
+
+  #chart-container canvas { width: 100%; height: 100%; display: block; }
+
+  /* Right side: info + question */
+  #side {
+    flex: 1;
+    min-width: 320px;
+  }
+
+  #info-box {
+    background: #fff;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    margin-bottom: 12px;
+  }
+
+  pre#raw {
+    background: #0f1724;
+    color: #dbeafe;
+    padding: 8px;
+    border-radius: 6px;
+    overflow: auto;
+    max-height: 160px;
+  }
+
+  /* Question / options */
+  /* #question-area { margin-top: 10px; } */
+  #options { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .option-btn {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #c0c6cf;
+      background: #f3f4f6;
+      cursor: pointer;
+      user-select: none;
+  }
+  .option-btn.selected {
+      background: linear-gradient(180deg, #34d399, #10b981);
+      color: white;
+      border-color: #08914a;
+      box-shadow: 0 3px 8px rgba(16,185,129,0.12);
+  }
+
+  /* Answer highlighting in summary */
+  .user-answer { display: inline-block; padding: 2px 6px; border-radius: 6px; margin-right:4px; font-size: 0.95em; }
+  .correct-answer { background: #dcfce7; color: #065f46; border: 1px solid #bbf7d0; }
+  .wrong-answer { background: #fee2e2; color: #7f1d1d; border: 1px solid #fecaca; }
+  .correct-answers { color: #333; margin-left: 8px; font-size: 0.95em; }
+
+
+  #controls { margin-top: 8px; display:flex; gap:8px; align-items:center; }
+  #next { padding: 8px 12px; border-radius:8px; border: none; background: #2563eb; color: white; cursor: pointer; }
+  #clear { padding: 6px 10px; border-radius:8px; border: 1px solid #cbd5e1; background: white; cursor: pointer; }
+  #progress { margin-left: 12px; color:#333; font-size:14px; }
+
+  /* Final screen */
+  #final-screen { display:none; margin-top: 18px; }
+  #final-chart-container { width: 60vw; max-width: 900px; height: 320px; margin-bottom: 12px; }
+
+  
+  .muted { color: #666; font-size: 13px; }
+  .info-field { margin: 6px 0; }
+  /* Refs-boxin määritys */
+  .refs-box {
+    background: #fff;
+    border: 1px solid #e6e6e6;
+    padding: 6px 8px;
+    border-radius: 6px;
+    
+    max-height: none;
+    overflow: visible;
+    font-size: 0.78em;
+    color: #222;
+    margin-top: 8px;
+    display: none; 
+  }
+  .final-layout { display:flex; gap:12px; align-items:flex-start; }
+  .final-layout .refs-box {flex: 0 0 220px; max-height: 320px; }
+  .final-main-right { flex: 1; min-width: 0; }
+  /* Responsive improvements for mobile */
+  @media (max-width: 900px) {
+    body { margin: 12px; }
+    #main { flex-direction: column; }
+    #chart-container { width: 100%; max-width: none; min-width: 0; height: 48vh; }
+    #side { min-width: 0; margin-top: 12px; }
+    #final-chart-container { width: 100%; height: 280px; }
+    /* tarkoitus piilottaa refboxit mobiilissa*/
+    /* .final-mode .refs-box { display: none; } */
+    /* option buttons asetukset */
+    .option-btn { padding: 10px 14px; font-size: 1rem; flex: 1 1 48%; }
+    #options { gap:10px; }
+    #controls { flex-direction: column; gap:8px; align-items: stretch; }
+    #next, #clear { width: 100%; }
+    .refs-box { font-size: 0.85em; }
+    .final-layout { flex-direction: column; }
+    .final-layout .refs-box { flex: none; width: 100%; max-height: none; }
+  }
+
+  @media (min-width: 901px) and (max-width: 1200px) {
+    /* Medium screens: slightly larger chart area */
+    #chart-container { height: min(56vh, 520px); }
+    #final-chart-container { height: 320px; }
+  }
+
+  /* Final-mode: balance left/right columns when summary is displayed */
+  .final-mode { align-items: stretch; }
+  .final-mode #chart-container, .final-mode #side { align-self: stretch; }
+  .final-mode #chart-container { margin-bottom: 0; }
+  /* Ensure final summary doesn't add extra top spacing that misaligns columns */
+  .final-mode #final-screen { margin-top: 0 !important; padding-top: 0 !important; }
+  .final-mode #final-screen h2 { margin-top: 0 !important; }
+  .final-mode #summary-list { margin-top: 0 !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="headline">Hallituskausien tarkastelu — interaktiivinen katselu</h1>
+  <div id="meta" class="muted">Talouden tunnuslukuja hallituskauden alkamis ja lopetusvuoden lopusta mitattuna.</div>
+</header>
+
+<main id="main">
+  <div id="chart-container">
+    <canvas id="chart"></canvas>
+    <div id="refs-box" class="refs-box">
+      <strong>Lähdeviittaukset:</strong>
+      <p style="margin:6px 0 0 0;">Suomen virallinen tilasto (SVT): Kansantalouden vuositilinpito [verkkojulkaisu]. ISSN=2954-0828. Helsinki: Tilastokeskus [Viitattu: 04.12.2025]. Saantitapa: https://stat.fi/tilasto/vtp</p>
+      <p style="margin:6px 0 0 0;">Valtiokonttori: Valtionvelka ja BKT [Viitattu: 04.12.2025]. Saantitapa: https://www.valtionvelka.fi/tilastot/tilastoja_valtionvelasta/</p>
+      <p style="margin:6px 0 0 0;">Valtioneuvosto: Suomen hallitukset ja ministerit [Viitattu: 04.12.2025]. Saantitapa: https://valtioneuvosto.fi/hallitukset-ja-ministerit</p>
+    </div>
+  </div>
+
+    
+  <div id="side">
+    <div id="info-box">
+      <div class="info-field"><strong id="gov-title">Ladataan...</strong></div>
+      <div class="info-field muted" id="gov-sub">hallituksen lisätiedot</div>
+      <div class="info-field" id="gov-nickname"></div>
+      <div class="info-field" id="gov-pm"></div>
+      <div class="info-field" id="gov-hint"></div>
+    </div>
+
+    <div id="question-area" style="display:none;">
+      <p id="question"><strong>Kysymys:</strong> Valitse vaihtoehdot</p>
+      <div id="options"></div>
+
+      <div id="controls">
+        <button id="clear">Tyhjennä</button>
+        <button id="next">Seuraava</button>
+        <div id="progress" class="muted">0 / 6</div>
+      </div>
+    </div>
+
+    <div style="margin-top:0px; visibility: hidden;" >
+      <details>
+        <!-- <summary>raakadatan(debug)</summary> -->
+        <pre id="raw">{}</pre>
+      </details>
+    </div> 
+
+    <!-- Final summary area -->
+    <div id="final-screen">
+      <h2>Yhteenveto</h2>
+      <div id="score-area"></div>
+      <div id="feedback-area"></div>
+      <div class="final-layout">
+        <div class="final-main-right">
+          <div id="final-chart-container"><canvas id="final-chart"></canvas></div>
+          <div id="summary-list"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  //Muuttuja datan käyttöön. Arvo asetetaan fetchereissä
+  const appState = {
+  Series1: { a: null, b: null, c: null },
+  Series2: { a: null, b: null, c: null },
+  Series3: { a: null, b: null, c: null }
+};
+let apiData = null;
+
+//Url tilastokeskuksen avoimeen rajapintaan ja queryn määritykset
+
+const API_URL = "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/vtp/statfin_vtp_pxt_123x.px";
+
+const requestBody = {
+  
+  "query": [
+    {
+      "code": "Taloustoimi",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "B1GMH",
+          "P3JK",
+          "EP"
+        ]
+      }
+    },
+    {
+      "code": "Vuosi",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "2003",
+          "2005",
+          "2007",
+          "2009",
+          "2011",
+          "2013",
+          "2015",
+          "2017",
+          "2019",
+          "2021",
+          "2023",
+          "2024"
+        ]
+      }
+    },
+    {
+      "code": "Tiedot",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "cp_eur"
+        ]
+      }
+    }
+  ],
+  "response": {
+    "format": "json-stat2"
+  }
+}
+fetch(API_URL, {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json"
+    },
+    body: JSON.stringify(requestBody)
+})
+  .then(response => response.json())
+  .then(data => {
+    apiData = data;
+  
+    
+    
+    
+    
+  })
+
+
+function getValue(data, taloustoimiId, tiedotId, vuosiId) {
+    const T = data.dimension.Taloustoimi.category.index[taloustoimiId];
+    const D = data.dimension.Tiedot.category.index[tiedotId];
+    const V = data.dimension.Vuosi.category.index[vuosiId];
+
+    const countT = Object.keys(data.dimension.Taloustoimi.category.index).length;
+    const countD = Object.keys(data.dimension.Tiedot.category.index).length;
+    const countV = Object.keys(data.dimension.Vuosi.category.index).length;
+
+    const index = T * (countD * countV) + D * countV + V;
+
+    return data.value[index];
+}
+
+async function fetchGov1() {
+
+  
+appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2003");
+appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2005");
+appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2007");
+appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2003");
+appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2005");
+appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2007");
+appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2003");
+appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2005");
+appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2007");
+
+  return {
+    id: "2003-2007",
+    name: "Jäätteenmäki/Vanhanen",
+    months: ["2003","2005","2007"],
+    series1: [appState.Series1.a,appState.Series1.b,appState.Series1.c],
+    series2: [appState.Series2.a,appState.Series2.b,appState.Series2.c],
+    series3: [12130.83,11424.76,10577.92],
+    infoText: "",
+    pm: ": Ensimmäinen kokonainen hallituskausi euroaikana.",
+    nickname: "Pääministeri vaihtui vain pari kuukautta hallituksen aloittamisen jälkeen.",
+    hint: "Muistatko hallituspuolueet? Vastaa nappeja klikkaamalla.<br> Oikeat valinnat kerryttävät pisteitä. Miinuspisteitä saat vääristä valinnoista.",
+    options: ["Kokoomus","SDP","Keskusta","Vihreät","PS","RKP","KD","Vasemmistoliitto","Liike Nyt"],
+    correctAnswers: ["Keskusta", "SDP", "RKP"]
+  };
+}
+
+async function fetchGov2() {
+
+appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2007");
+appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2009");
+appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2011");
+appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2007");
+appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2009");
+appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2011");
+appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2007");
+appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2009");
+appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2011");
+
+  return {
+    id: "2007-2011",
+    name: "Vanhanen 2/Kiviniemi",
+    months: ["2007","2009","2011"],
+    series1: [appState.Series1.a,appState.Series1.b,appState.Series1.c],
+    series2: [appState.Series2.a,appState.Series2.b,appState.Series2.c],
+    series3: [10577.92,12011.94,14748.55],
+    infoText: "",
+    pm: ": Viimeisin hallituskausi, jossa pääministeri puolue sai jatkaa vaalien jälkeen.",
+    nickname: "Hallitus erosi kesken vaalikauden 2010 pääministeripuolueen puheenjohtajan vaihtumisen vuoksi, mutta jatkoi samalla pohjalla hallituskauden loppuun",
+    hint: "Muistatko hallituspuolueet? Vastaa nappeja klikkaamalla.<br> Oikeat valinnat kerryttävät pisteitä. Miinuspisteitä saat vääristä valinnoista.",
+    options: ["Kokoomus","SDP","Keskusta","Vihreät","RKP","KD","PS","Vasemmistoliitto", "Liike Nyt"],
+    correctAnswers: ["Keskusta","Kokoomus","RKP","Vihreät"]
+  };
+}
+
+async function fetchGov3() {
+appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2011");
+appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2013");
+appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2015");
+appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2011");
+appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2013");
+appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2015");
+appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2011");
+appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2013");
+appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2015");
+
+  return {
+    id: "2011-2015",
+    name: "Katainen/Stubb",
+    months: ["2011","2013","2015"],
+    series1: [appState.Series1.a,appState.Series1.b,appState.Series1.c],
+    series2: [appState.Series2.a,appState.Series2.b,appState.Series2.c],
+    series3: [14748.55,16455.40,18174.72],
+    infoText: "",
+    pm: ": Tunnettiin myös nimellä Sixpack!",
+    nickname: "Kaksi puoluetta jätti leikin kesken ennen kuin hallituskausi päättyi.",
+    hint: "Mitkä puolueet aloittivat hallituksessa? Vastaa nappeja klikkaamalla.<br> Oikeat valinnat kerryttävät pisteitä. Miinuspisteitä saat vääristä valinnoista.",
+    options: ["Kokoomus","SDP","Keskusta","Vihreät","RKP","KD","PS","Vasemmistoliitto", "Liike Nyt"],
+    correctAnswers: ["Kokoomus","RKP","Vihreät","SDP","KD","Vasemmistoliitto"]
+  };
+}
+
+async function fetchGov4() {
+
+appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2015");
+appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2017");
+appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2019");
+appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2015");
+appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2017");
+appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2019");
+appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2015");
+appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2017");
+appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2019");
+
+  return {
+    id: "2015-2019",
+    name: "Sipilä",
+    months: ["2015","2017","2019"],
+    series1: [appState.Series1.a,appState.Series1.b,appState.Series1.c],
+    series2: [appState.Series2.a,appState.Series2.b,appState.Series2.c],
+    series3: [18174.72,19151.99,19193.23],
+    infoText: "",
+    pm: ": Kolme ässää",
+    nickname: "Yksi hallituspuolueista hajosi kesken hallituskauden",
+    hint: "Mitkä puolueet aloittivat hallituksessa? Vastaa nappeja klikkaamalla.<br> Oikeat valinnat kerryttävät pisteitä. Miinuspisteitä saat vääristä valinnoista.",
+    options: ["Kokoomus","SDP","Keskusta","Vihreät","RKP","KD","PS","Vasemmistoliitto", "Liike Nyt"],
+    correctAnswers: ["Kokoomus","Keskusta","PS"]
+  };
+}
+
+async function fetchGov5() {
+
+appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2019");
+appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2021");
+appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2023");
+appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2019");
+appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2021");
+appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2023");
+appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2019");
+appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2021");
+appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2023");
+
+  return {
+    id: "2019-2023",
+    name: "Rinne/Marin",
+    months: ["2019","2021","2023"],
+    series1: [appState.Series1.a,appState.Series1.b,appState.Series1.c],
+    series2: [appState.Series2.a,appState.Series2.b,appState.Series2.c],
+    series3: [19193.23,23149,27803],
+    infoText: "",
+    pm: ": Pääministeri vaihtui aikaisessa vaiheessa hallituskautta",
+    nickname: "Muistetaan korona ajasta ja sen mukananaan tuomista poikkeustoimista",
+    hint: "Muistatko hallituspuolueet?",
+    options: ["Kokoomus","SDP","Keskusta","Vihreät","RKP","KD","PS","Vasemmistoliitto", "Liike Nyt"],
+    correctAnswers: ["SDP","Keskusta","Vihreät","Vasemmistoliitto","RKP"]
+  };
+}
+
+async function fetchGov6() {
+// huom vain kaksi datasarjaa
+appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2023");
+appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2024");
+
+appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2023");
+appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2024");
+
+appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2023");
+appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2024");
+
+
+  return {
+    id: "2023-",
+    name: "Orpo",
+    months: ["2023","2024",],
+    series1: [appState.Series1.a,appState.Series1.b],
+    series2: [appState.Series2.a,appState.Series2.b],
+    series3: [27803,29995],
+    infoText: "",
+    pm: ": Nykyhallitus",
+    nickname: "Hallituskausi ei ole vielä päättynyt. Luvut 2024 loppuun. ",
+    hint: "Tiedätkö hallituspuolueet?",
+    options: ["Kokoomus","SDP","Keskusta","Vihreät","RKP","KD","PS","Vasemmistoliitto", "Liike Nyt"],
+    correctAnswers: ["Kokoomus","PS","RKP"]
+  };
+}
+// Koonti osion fetcheri sisältää muista poiketen eri osioiden muutoksia
+async function fetchSummary() {
+document.getElementById("meta").textContent = "Tunnusluvut alkaen 2003 Jäätteenmäki/Vanhanen - 2024 Orpo";
+document.getElementById("clear").style.display = "none";
+
+
+document.getElementById("next").textContent = "Katso tulokset!";
+document.getElementById("options").style.display = "none";
+document.getElementById("info-box").style.display = "none";
+appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2003");
+appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2015");
+appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2024");
+appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2003");
+appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2015");
+appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2024");
+appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2003");
+appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2015");
+appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2024");
+
+  return {
+    id: "2003-2023",
+    name: "Yhteensä koko ajalta",
+    months: ["2003","2014","2024"],
+    series1: [appState.Series1.a,appState.Series1.b,appState.Series1.c],
+    series2: [appState.Series2.a,appState.Series2.b,appState.Series2.c],
+    series3: [12130.83,17373.76,29995],
+    infoText: "",
+    pm: "",
+    nickname: "",
+    hint: "Kiitos osallistumisesta!!",
+    
+  };
+  
+}
+//kunkin hallituksen ja koonti sivun fetcherit
+const fetchers = [fetchGov1, fetchGov2, fetchGov3, fetchGov4, fetchGov5, fetchGov6, fetchSummary];
+
+
+let currentIndex = 0;
+const total = fetchers.length;
+const userAnswers = Array(total).fill(null); // Valitut per hallitus arrayna
+const userRaw = Array(total).fill(null);     
+let currentChart = null;
+let finalChart = null;
+
+const sourcePlugin = {
+  id: "sourcePlugin",
+  afterDraw(chart, args, options) {
+    const {ctx, chartArea} = chart;
+    ctx.save();
+    ctx.font = "12px sans-serif";
+    ctx.fillStyle = "#666";
+    ctx.textAlign = "center";
+    ctx.fillText(options.text, (chartArea.left + chartArea.right) / 2, chartArea.bottom + 30);
+    ctx.restore();
+  }
+};
+/* -------------------------
+   Pieni taulukko/small chart tilastokeskuksen datan näyttämistä varten (3 datasarjaa)
+   ------------------------- */
+Chart.register(sourcePlugin);
+// hover label plugin määritykset
+const hoverValuePlugin = {
+  id: 'hoverValuePlugin',
+  afterDraw(chart, args, options) {
+    const info = chart._hoverInfo;
+    if (!info || info.index == null) return;
+    const meta = chart.getDatasetMeta(info.datasetIndex);
+    const el = meta && meta.data && meta.data[info.index];
+    if (!el) return;
+    const ctx = chart.ctx;
+    const x = el.x;
+    const y = el.y;
+    const value = chart.data.datasets[info.datasetIndex].data[info.index];
+    const datasetLabel = chart.data.datasets[info.datasetIndex].label || '';
+    // Formatoidaan euromääräiseksi
+    const formatted = (typeof value === 'number')
+      ? new Intl.NumberFormat('fi-FI', { maximumFractionDigits: 0 }).format(value) + ' €'
+      : (value == null ? '' : value.toString());
+    const text = datasetLabel ? `${datasetLabel}: ${formatted}` : `${formatted}`;
+
+    ctx.save();
+    // bubble
+    const padding = 8;
+    ctx.font = (options && options.font) || '12px sans-serif';
+    const metrics = ctx.measureText(text);
+    const w = metrics.width + padding * 2;
+    const h = 22;
+    let bx = x - w / 2;
+    const by = y - h - 12;
+    // keep bubble inside canvas horizontally
+    const canvasWidth = chart.width || (chart.canvas && chart.canvas.width) || 0;
+    if (bx < 4) bx = 4;
+    if (bx + w > canvasWidth - 4) bx = Math.max(4, canvasWidth - w - 4);
+
+    // rounded rectangle
+    const r = 6;
+    ctx.fillStyle = (options && options.backgroundColor) || 'rgba(0,0,0,0.75)';
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.arcTo(bx + w, by, bx + w, by + h, r);
+    ctx.arcTo(bx + w, by + h, bx, by + h, r);
+    ctx.arcTo(bx, by + h, bx, by, r);
+    ctx.arcTo(bx, by, bx + w, by, r);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = (options && options.color) || '#fff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, bx + padding, by + h / 2);
+    ctx.restore();
+  }
+};
+if (window.Chart && !Chart._hoverValuePlugin_registered) { try { Chart.register(hoverValuePlugin); Chart._hoverValuePlugin_registered = true; } catch (e) { /* ignore */ } }
+function drawChart(labels, s1 = [], s2 = [], s3 = []) {
+  const canvas = document.getElementById("chart");
+  if (!canvas) return; // nothing to draw into
+  const ctx = canvas.getContext('2d');
+  // remove any previous hover handler attached to canvas
+  if (canvas._hoverHandler) { try { canvas.removeEventListener('mousemove', canvas._hoverHandler); } catch(e){} canvas._hoverHandler = null; }
+  if (currentChart) { try { currentChart.destroy(); } catch(e){} currentChart = null; }
+
+  currentChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: labels || [],
+      datasets: [
+        {
+          label: "BKT(€/Henkilö)",
+          data: s1,
+          borderColor: "rgba(34,197,94,1)",
+          backgroundColor: "rgba(34,197,94,1)",
+          tension: 0.25,
+          borderWidth: 2
+        },
+        {
+          label: "Julkiset kulutusmenot(€/Henkilö)",
+          data: s2,
+          borderColor: "rgba(54,162,235,1)",
+          backgroundColor: "rgba(54,162,235,0.18)",
+          tension: 0.25,
+          borderWidth: 2
+        },
+        {
+          label: "Valtionvelka(€/Asukas)",
+          data: s3,
+          borderColor: "rgba(255,99,132,1)",
+          backgroundColor: "rgba(255,99,132,1)",
+          tension: 0.25,
+          borderWidth: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" },
+        sourcePlugin: {
+    text: "Lähde: Tilastokeskus, Valtiokonttori"
+  },     
+        // tooltip pois käytöstä koska plugin käytössä
+        tooltip: { enabled: false }
+      },
+      scales: {
+    y: {
+      grace: '20%'  // lisää tilaa taulukkoon koska hover label ei näy jos sarjojen arvot lähellä maximia
+    }
+  }
+    }
+  });
+    // mousemove handler liityen datasarjan labelin näyttämiseen sekä plugin määritys
+    
+    const hoverHandler = function (evt) {
+      try {
+        if (!currentChart) return;
+        const elems = currentChart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false) || [];
+        if (elems.length) {
+          const el = elems[0];
+          const info = { datasetIndex: el.datasetIndex, index: el.index };
+          if (!currentChart._hoverInfo || currentChart._hoverInfo.index !== info.index || currentChart._hoverInfo.datasetIndex !== info.datasetIndex) {
+            currentChart._hoverInfo = info;
+            currentChart.draw();
+          }
+        } else {
+          if (currentChart._hoverInfo && currentChart._hoverInfo.index != null) {
+            currentChart._hoverInfo = { datasetIndex: null, index: null };
+            currentChart.draw();
+          }
+        }
+      } catch (e) {
+        // varotoimenpide mikäli datalabels plugin puuttuu
+        // Näyttää datan via hoverValuePlugin
+      }
+    };
+    canvas._hoverHandler = hoverHandler;
+    canvas.addEventListener('mousemove', hoverHandler);
+}
+
+/* -------------------------
+   SHOW BUTTON OPTIONS
+   ------------------------- */
+
+function showOptions(options = []) {
+  const c = document.getElementById("options");
+  c.innerHTML = "";
+  options.forEach(opt => {
+    const btn = document.createElement("button");
+    btn.className = "option-btn";
+    btn.type = "button";
+    btn.textContent = opt;
+    btn.addEventListener("click", () => btn.classList.toggle("selected"));
+    c.appendChild(btn);
+  });
+}
+
+function getSelectedOptions() {
+  return Array.from(document.querySelectorAll("#options .option-btn.selected")).map(b => b.textContent);
+}
+
+function clearSelections() {
+  document.querySelectorAll("#options .option-btn.selected").forEach(b => b.classList.remove("selected"));
+}
+
+
+async function showStep(i) {
+  
+  const fetchFn = fetchers[i];
+  let data;
+  try {
+    data = await fetchFn(); 
+  } catch (err) {
+    console.error("Fetch failed for index", i, err);
+    data = {
+      id: "error",
+      name: "Lataus epäonnistui",
+      months: [],
+      series1: [], series2: [], series3: [],
+      infoText: "Virhe haettaessa dataa.",
+      pm: "",
+      nickname: "",
+      hint: "",
+      options: new Array(8).fill("Virhe")
+    };
+  }
+
+  // tallennetaan data muuttujaan
+  userRaw[i] = data;
+
+  // Päivitetään UI kentät
+  document.getElementById("gov-title").textContent = `${i+1}. ${data.name || ""}`;
+  document.getElementById("gov-sub").textContent = data.id ? `Vuodet: ${data.id}` : "";
+  document.getElementById("gov-nickname").textContent = data.nickname ? `: ${data.nickname}` : "";
+  document.getElementById("gov-pm").textContent = data.pm || "";
+  
+
+  // raw JSON debug
+  document.getElementById("raw").textContent = JSON.stringify(data, null, 2);
+  // Alla oleva console log seuraa osioiden etenemistä sen jälkeen draw chart
+  console.log(i);
+  drawChart(data.months || [], data.series1 || [], data.series2 || [], data.series3 || []);
+  // refboxit piilotettu koko ajan
+  const refsElem = document.getElementById('refs-box');
+  if (refsElem) refsElem.style.display = 'none';
+
+  // final mode layout pois käytöstä
+  const mainElem = document.getElementById('main');
+  if (mainElem && mainElem.classList.contains('final-mode')) mainElem.classList.remove('final-mode');
+
+  // Kysymykset & Valinnat
+  const qarea = document.getElementById("question-area");
+  document.getElementById("question").innerHTML = `<strong>Kysymys:</strong> ${data.hint || "Muistatko hallituspuolueet?"}`;
+  if(i >= 6){
+    document.getElementById("question").innerHTML = `<strong>Valmista tuli! </strong> ${data.hint || ""}`;
+    
+  };
+  showOptions(data.options || ["Kokoomus","Keskusta","Vihreät","SDP","KD","PS","Vasemmistoliitto"]);
+
+  
+  if (userAnswers[i] && userAnswers[i].length) {
+    // Valittujen buttoneiden sisällöt listaan
+    document.querySelectorAll("#options .option-btn").forEach(btn => {
+      if (userAnswers[i].includes(btn.textContent)) btn.classList.add("selected");
+    });
+  } else {
+    clearSelections();
+  }
+
+  // Etenemisen seuranta
+  document.getElementById("progress").textContent = `${i+1} / ${total}`;
+  qarea.style.display = "block";
+}
+
+
+  //  Next-button käsittely  indeksin kasvatus ja valintojen tallennus
+  
+
+document.getElementById("next").addEventListener("click", async () => {
+  
+  const sel = getSelectedOptions();
+  userAnswers[currentIndex] = sel;
+
+  currentIndex++;
+  if (currentIndex < total) {
+    await showStep(currentIndex);
+  } else {
+    
+    finishFlow();
+  }
+});
+
+document.getElementById("clear").addEventListener("click", () => {
+  clearSelections();
+});
+
+
+function finishFlow() {
+  // hide question area
+  document.getElementById("question-area").style.display = "none";
+  document.getElementById("final-screen").style.display = "block";
+  
+  // Alla oleva kommentoitu koodi näyttää lähteet tarkemmin omassa boxissa viimeisessä ruudussa. Toimi vain isolla ruudulla siksi kommentti
+  // const refsElem = document.getElementById('refs-box');
+  // if (refsElem) refsElem.style.display = 'block';
+  // Balance left/right columns by enabling final-mode
+  const mainElem = document.getElementById('main');
+  if (mainElem) mainElem.classList.add('final-mode');
+  document.getElementById("gov-title").textContent = "Kiitos — yhteenveto alla";
+  document.getElementById("meta").textContent = "Tunnusluvut alkaen 2003 Jäätteenmäki/Vanhanen - 2024 Orpo";
+  let score = 0;
+let maxPossible = 0;
+
+const results = []; // Hallituskohtaisen datan käsittely
+
+for (let i = 0; i < total - 1; i++) {
+  const d = userRaw[i] || {};
+  const selected = userAnswers[i] || [];
+  if (d.correctAnswers && Array.isArray(d.correctAnswers)) {
+    const correct = d.correctAnswers.map(x => x.toString().toLowerCase());
+    const selectedLower = selected.map(s => s.toString().toLowerCase());
+
+    // Laskee oikeat ja väärät vastaukset
+    const correctCount = selected.filter(s => correct.includes(s.toLowerCase())).length;
+    const wrongCount = selected.filter(s => !correct.includes(s.toLowerCase())).length;
+
+    score += correctCount - wrongCount;
+    maxPossible += correct.length;
+
+    // tallentaa datan 
+    results.push({
+      name: d.name,
+      correct: d.correctAnswers,
+      selected: selected,
+      correctCount: correctCount,
+      wrongCount: wrongCount,
+      points: correctCount - wrongCount
+    });
+  } else {
+    score += selected.length;
+    maxPossible += d.correctAnswers ? d.correctAnswers.length : 0;
+    // maxPossible += (d.options ? d.options.length : 8);
+    results.push({
+      name: d.name,
+      selected: selected,
+      points: selected.length
+    });
+  }
+}
+
+  // Näytetään yhteen laskettu tulos ja tämän jälkeen palaute/uudelleen yritys button
+  const scoreArea = document.getElementById("score-area");
+  scoreArea.innerHTML = `<h1>Pisteet: ${score}/${maxPossible}</h1>
+ <button id="retry-btn" style="
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #c0c6cf;
+      background: #4caf50;
+      cursor: pointer;
+      user-select: none;
+      color:white;
+      cursor:pointer;">
+    Yritä uudelleen
+  </button> `;
+  document.getElementById("retry-btn").onclick = function () {
+  location.reload();
+};
+  const feedbackarea = document.getElementById("feedback-area");
+  if(score > 19){
+    feedbackarea.innerHTML = "<h1>Olet hallitus kokoonpanojen Supertietäjä!!</h1>";
+  } else if( score > 14){
+    feedbackarea.innerHTML = "<h1>Tietämyksesi on kelpo tasolla vain muutama pikku hassi!</h1>";
+  } else if( score > 9){
+    feedbackarea.innerHTML = "<h1>About puolet oikein! Hienoa!</h1>";
+  } else if( score > 5){
+    feedbackarea.innerHTML = "<h1>Parantamisen varaa jäi vielä!!</h1>";
+  } else if( score <= 5){
+    feedbackarea.innerHTML = "<h1>Tietämyksesi hallituskokoonpanoista on surkeaa!!</h1>";
+  }
+  // Käsittelee vastaukset
+  const result = userRaw.map((gov, index) => {
+  const selected = userAnswers[index] || [];
+  const correct = gov.correctAnswers || [];
+  const rightCount = selected.filter(s => correct.includes(s)).length;
+  return rightCount;
+});
+
+  // piirtää final chartin
+
+
+
+const ctx2 = document.getElementById("final-chart");
+
+if (finalChart) finalChart.destroy();
+// data trimmataan koska viimeinen indexi on koonti 
+const trimmedRaw = userRaw.slice(0, -1);
+const trimmedAnswers = userAnswers.slice(0, -1);
+
+const labels = trimmedRaw.map(gov => gov.name || "Hallituksen nimi");
+
+// muuttujat vastauksille ja pisteille
+const correctData = [];
+const wrongData = [];
+const pointsData = [];
+const maxPossibleScores = [];
+
+trimmedRaw.forEach((gov, index) => {
+  const selected = trimmedAnswers[index] || [];
+  const correct = (gov.correctAnswers || []).map(x => x.toString().toLowerCase());
+
+  const correctCount = selected.filter(s => correct.includes(s.toString().toLowerCase())).length;
+  const wrongCount = selected.filter(s => !correct.includes(s.toString().toLowerCase())).length;
+
+  correctData.push(correctCount);
+  wrongData.push(wrongCount);
+  pointsData.push(correctCount - wrongCount);
+  maxPossibleScores.push(correct.length);
+});
+
+const overallMaxPossible = Math.max(...maxPossibleScores, 1);
+
+// Labeleita varten tehty plugin tarkoituksena näyttää pisteet per pylväs Huom labelit ei käytössä
+const finalLabelsPlugin = {
+  id: 'finalLabelsPlugin',
+  afterDraw(chart, args, options) {
+    // Poistaa labelit mobiiliversiosta
+    return;
+  }
+};
+if (window.Chart && !Chart._finalLabels_registered) { try { Chart.register(finalLabelsPlugin); Chart._finalLabels_registered = true; } catch (e) { /* ignore */ } }
+
+const canvas2 = document.getElementById("final-chart");
+if (canvas2) {
+  const ctx2 = canvas2.getContext('2d');
+  if (finalChart) { try { finalChart.destroy(); } catch(e){} finalChart = null; }
+
+  finalChart = new Chart(ctx2, {
+  type: "bar",
+  data: {
+      labels: labels || [],
+    datasets: [
+      {
+        label: "Oikeat vastaukset",
+        data: correctData,
+        backgroundColor: "rgba(75, 192, 192, 0.6)",
+        borderColor: "rgba(75, 192, 192, 1)",
+        borderWidth: 1
+      },
+      {
+        label: "Väärät vastaukset",
+        data: wrongData,
+        backgroundColor: "rgba(255, 99, 132, 0.6)",
+        borderColor: "rgba(255, 99, 132, 1)",
+        borderWidth: 1
+      }
+    ]
+  },
+  options: {
+    
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: true },
+
+      
+      tooltip: { enabled: false },
+
+    
+
+      title: { display: false },
+
+      annotation: {
+        annotations: maxPossibleScores.map((max, i) => ({
+          type: 'line',
+          mode: 'horizontal',
+          scaleID: 'y',
+          value: max,
+          borderColor: 'red',
+          borderWidth: 1,
+          borderDash: [5, 5],
+          xMin: i - 0.45,
+          xMax: i + 0.45,
+          label: { enabled: false } 
+        }))
+      }
+    },
+
+    scales: {
+      x: { stacked: true },
+      y: { stacked: true, beginAtZero: true, max: 9 }
+    }
+  }
+});
+
+
+
+  // Yhteenveto osio, jossa listat vastauksista
+  const summary = document.getElementById("summary-list");
+  summary.innerHTML = "<h3>Vastauksesi</h3>";
+  
+  const ul = document.createElement("ul");
+  for (let i = 0; i < total - 1; i++) {
+    const d = userRaw[i] || {};
+    const li = document.createElement("li");
+
+    const nameStrong = document.createElement('strong');
+    nameStrong.textContent = (d.name || ('Hallitus ' + (i+1))) + ':';
+    li.appendChild(nameStrong);
+    li.appendChild(document.createTextNode(' '));
+
+    const selected = userAnswers[i] || [];
+    const correctList = (d.correctAnswers || []).map(x => x.toString().toLowerCase());
+
+    if (!selected || selected.length === 0) {
+      const em = document.createElement('em');
+      em.textContent = 'ei valintoja';
+      li.appendChild(em);
+    } else {
+      selected.forEach((ans, idx) => {
+        const span = document.createElement('span');
+        span.className = 'user-answer';
+        const ansText = ans == null ? '' : ans.toString();
+        const isCorrect = correctList.length ? correctList.includes(ansText.toLowerCase()) : false;
+        span.classList.add(isCorrect ? 'correct-answer' : 'wrong-answer');
+        span.textContent = ansText;
+        li.appendChild(span);
+        if (idx < selected.length - 1) li.appendChild(document.createTextNode(', '));
+      });
+    }
+
+    const correctText = (d.correctAnswers && d.correctAnswers.length) ? d.correctAnswers.join(', ') : 'ei tietoa';
+    const corrSpan = document.createElement('span');
+    corrSpan.className = 'correct-answers';
+    corrSpan.innerHTML = ` — Oikeat: <em>${correctText}</em>`;
+    li.appendChild(corrSpan);
+
+    ul.appendChild(li);
+  }
+  
+  summary.appendChild(ul);
+}
+}
+
+/* -------------------------
+   START
+   ------------------------- */
+(async function init() {
+  // initialize first step
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestBody)
+  });
+
+  apiData = await response.json();
+
+  console.log("API Ready:", apiData);
+  await showStep(0);
+})();
+</script>
+
+</body>
+</html>
