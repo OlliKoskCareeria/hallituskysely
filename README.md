@@ -1,6 +1,6 @@
 # Hallituskysely
 
-Tämä projekti on interaktiivinen kysely, jossa käyttäjä voi testata tietämystään Suomen hallituskoalitioista. Ohjelma hakee Tilastokeskuksen JSON Stat 2 -dataa ja näyttää tulokset JavaScript-kaavioina.
+Tämä projekti on interaktiivinen kysely, jossa käyttäjä voi testata tietämystään Suomen hallituskoalitioista. Ohjelma hakee Tilastokeskuksen JSON Stat 2 -dataa avoimesta rajapinnasta ja näyttää sitä JS kaavioissa sitä mukaa kun käyttäjä etenee kyselyssä.
 
 ## Ominaisuudet
 - Kysely Suomen hallituskoalitioista
