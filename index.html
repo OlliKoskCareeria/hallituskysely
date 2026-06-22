@@ -224,16 +224,19 @@
   Series3: { a: null, b: null, c: null }
 };
 let apiData = null;
+const CONTENT_CODE = "ntp-cp_eur";
 
 //Url tilastokeskuksen avoimeen rajapintaan ja queryn määritykset
 
-const API_URL = "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/vtp/statfin_vtp_pxt_123x.px";
+
+const API_URL = "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ntp/15ae.px";
 
 const requestBody = {
   
+  
   "query": [
     {
-      "code": "Taloustoimi",
+      "code": "taloustoimi_1_20180101",
       "selection": {
         "filter": "item",
         "values": [
@@ -244,7 +247,7 @@ const requestBody = {
       }
     },
     {
-      "code": "Vuosi",
+      "code": "timeperiod_y",
       "selection": {
         "filter": "item",
         "values": [
@@ -259,16 +262,16 @@ const requestBody = {
           "2019",
           "2021",
           "2023",
-          "2024"
+          "2025"
         ]
       }
     },
     {
-      "code": "Tiedot",
+      "code": "contentscode",
       "selection": {
         "filter": "item",
         "values": [
-          "cp_eur"
+          "ntp-cp_eur"
         ]
       }
     }
@@ -276,6 +279,7 @@ const requestBody = {
   "response": {
     "format": "json-stat2"
   }
+
 }
 fetch(API_URL, {
     method: "POST",
@@ -294,33 +298,128 @@ fetch(API_URL, {
     
   })
 
+function getValue(data, taloustoimiId, tiedotId, periodId) {
+  if (!data || !data.dimension || !data.value) {
+    throw new Error("getValue: apiData puuttuu tai on väärässä muodossa");
+  }
 
-function getValue(data, taloustoimiId, tiedotId, vuosiId) {
-    const T = data.dimension.Taloustoimi.category.index[taloustoimiId];
-    const D = data.dimension.Tiedot.category.index[tiedotId];
-    const V = data.dimension.Vuosi.category.index[vuosiId];
+  const defaultContentCode =
+    typeof CONTENT_CODE !== "undefined" ? CONTENT_CODE : "tasmcp";
 
-    const countT = Object.keys(data.dimension.Taloustoimi.category.index).length;
-    const countD = Object.keys(data.dimension.Tiedot.category.index).length;
-    const countV = Object.keys(data.dimension.Vuosi.category.index).length;
 
-    const index = T * (countD * countV) + D * countV + V;
+  
+  const taloustoimiAliases = {
+    P3JK: "P3KS13"
+  };
 
-    return data.value[index];
+  const contentAliases = {
+    cp_eur: defaultContentCode,
+    "vtp-cp_eur": defaultContentCode,
+    tasmcp: defaultContentCode
+  };
+
+  const ids = data.id || Object.keys(data.dimension);
+  const sizes = data.size || ids.map(id =>
+    Object.keys(data.dimension[id].category.index).length
+  );
+
+  function candidatesForPeriod(value) {
+    const str = String(value);
+    if (/^\d{4}$/.test(str)) {
+      return [str, `${str}Q1`];
+    }
+    return [str];
+  }
+
+  function findDimValue(valueCandidates) {
+    for (const dimKey of ids) {
+      const index = data.dimension[dimKey]?.category?.index;
+      if (!index) continue;
+
+      for (const value of valueCandidates) {
+        if (index[value] !== undefined) {
+          return {
+            dimKey,
+            value,
+            index: index[value]
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  const taloustoimiCandidates = [
+    taloustoimiId,
+    taloustoimiAliases[taloustoimiId]
+  ].filter(Boolean);
+
+  const contentCandidates = [
+    tiedotId,
+    contentAliases[tiedotId],
+    defaultContentCode
+  ].filter(Boolean);
+
+  const periodCandidates = candidatesForPeriod(periodId);
+
+  const taloustoimiMatch = findDimValue(taloustoimiCandidates);
+  const contentMatch = findDimValue(contentCandidates);
+  const periodMatch = findDimValue(periodCandidates);
+
+  if (!taloustoimiMatch || !contentMatch || !periodMatch) {
+    console.error("Dimensiot:", data.dimension);
+    console.error("Etsittiin:", {
+      taloustoimiId,
+      taloustoimiCandidates,
+      tiedotId,
+      contentCandidates,
+      periodId,
+      periodCandidates
+    });
+
+    throw new Error("getValue: tarvittavaa arvoa ei löytynyt API-datasta.");
+  }
+
+  const coords = ids.map(() => 0);
+
+  coords[ids.indexOf(taloustoimiMatch.dimKey)] = taloustoimiMatch.index;
+  coords[ids.indexOf(contentMatch.dimKey)] = contentMatch.index;
+  coords[ids.indexOf(periodMatch.dimKey)] = periodMatch.index;
+
+  const flatIndex = coords.reduce((acc, coord, i) => {
+    return acc * sizes[i] + coord;
+  }, 0);
+
+  return data.value[flatIndex];
 }
+// function getValue(data, taloustoimiId, tiedotId, vuosiId) {
+//     const T = data.dimension.Taloustoimi.category.index[taloustoimiId];
+//     const D = data.dimension.Tiedot.category.index[tiedotId];
+//     const V = data.dimension.Vuosi.category.index[vuosiId];
+
+//     const countT = Object.keys(data.dimension.Taloustoimi.category.index).length;
+//     const countD = Object.keys(data.dimension.Tiedot.category.index).length;
+//     const countV = Object.keys(data.dimension.Vuosi.category.index).length;
+
+//     const index = T * (countD * countV) + D * countV + V;
+
+//     return data.value[index];
+// }
+
 
 async function fetchGov1() {
 
   
-appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2003");
-appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2005");
-appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2007");
-appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2003");
-appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2005");
-appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2007");
-appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2003");
-appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2005");
-appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2007");
+appState.Series1.a = getValue(apiData, "B1GMH", CONTENT_CODE, "2003");
+appState.Series1.b = getValue(apiData, "B1GMH", CONTENT_CODE, "2005");
+appState.Series1.c = getValue(apiData, "B1GMH", CONTENT_CODE, "2007");
+appState.Series2.a = getValue(apiData, "P3JK", CONTENT_CODE, "2003");
+appState.Series2.b = getValue(apiData, "P3JK", CONTENT_CODE, "2005");
+appState.Series2.c = getValue(apiData, "P3JK", CONTENT_CODE, "2007");
+appState.Series3.a = getValue(apiData, "EP", CONTENT_CODE, "2003");
+appState.Series3.b = getValue(apiData, "EP", CONTENT_CODE, "2005");
+appState.Series3.c = getValue(apiData, "EP", CONTENT_CODE, "2007");
 
   return {
     id: "2003-2007",
@@ -340,15 +439,15 @@ appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2007");
 
 async function fetchGov2() {
 
-appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2007");
-appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2009");
-appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2011");
-appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2007");
-appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2009");
-appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2011");
-appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2007");
-appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2009");
-appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2011");
+appState.Series1.a = getValue(apiData, "B1GMH", CONTENT_CODE, "2007");
+appState.Series1.b = getValue(apiData, "B1GMH", CONTENT_CODE, "2009");
+appState.Series1.c = getValue(apiData, "B1GMH", CONTENT_CODE, "2011");
+appState.Series2.a = getValue(apiData, "P3JK", CONTENT_CODE, "2007");
+appState.Series2.b = getValue(apiData, "P3JK", CONTENT_CODE, "2009");
+appState.Series2.c = getValue(apiData, "P3JK", CONTENT_CODE, "2011");
+appState.Series3.a = getValue(apiData, "EP", CONTENT_CODE, "2007");
+appState.Series3.b = getValue(apiData, "EP", CONTENT_CODE, "2009");
+appState.Series3.c = getValue(apiData, "EP", CONTENT_CODE, "2011");
 
   return {
     id: "2007-2011",
@@ -367,15 +466,15 @@ appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2011");
 }
 
 async function fetchGov3() {
-appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2011");
-appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2013");
-appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2015");
-appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2011");
-appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2013");
-appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2015");
-appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2011");
-appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2013");
-appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2015");
+appState.Series1.a = getValue(apiData, "B1GMH", CONTENT_CODE, "2011");
+appState.Series1.b = getValue(apiData, "B1GMH", CONTENT_CODE, "2013");
+appState.Series1.c = getValue(apiData, "B1GMH", CONTENT_CODE, "2015");
+appState.Series2.a = getValue(apiData, "P3JK", CONTENT_CODE, "2011");
+appState.Series2.b = getValue(apiData, "P3JK", CONTENT_CODE, "2013");
+appState.Series2.c = getValue(apiData, "P3JK", CONTENT_CODE, "2015");
+appState.Series3.a = getValue(apiData, "EP", CONTENT_CODE, "2011");
+appState.Series3.b = getValue(apiData, "EP", CONTENT_CODE, "2013");
+appState.Series3.c = getValue(apiData, "EP", CONTENT_CODE, "2015");
 
   return {
     id: "2011-2015",
@@ -395,15 +494,15 @@ appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2015");
 
 async function fetchGov4() {
 
-appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2015");
-appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2017");
-appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2019");
-appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2015");
-appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2017");
-appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2019");
-appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2015");
-appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2017");
-appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2019");
+appState.Series1.a = getValue(apiData, "B1GMH", CONTENT_CODE, "2015");
+appState.Series1.b = getValue(apiData, "B1GMH", CONTENT_CODE, "2017");
+appState.Series1.c = getValue(apiData, "B1GMH", CONTENT_CODE, "2019");
+appState.Series2.a = getValue(apiData, "P3JK", CONTENT_CODE, "2015");
+appState.Series2.b = getValue(apiData, "P3JK", CONTENT_CODE, "2017");
+appState.Series2.c = getValue(apiData, "P3JK", CONTENT_CODE, "2019");
+appState.Series3.a = getValue(apiData, "EP", CONTENT_CODE, "2015");
+appState.Series3.b = getValue(apiData, "EP", CONTENT_CODE, "2017");
+appState.Series3.c = getValue(apiData, "EP", CONTENT_CODE, "2019");
 
   return {
     id: "2015-2019",
@@ -423,15 +522,15 @@ appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2019");
 
 async function fetchGov5() {
 
-appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2019");
-appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2021");
-appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2023");
-appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2019");
-appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2021");
-appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2023");
-appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2019");
-appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2021");
-appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2023");
+appState.Series1.a = getValue(apiData, "B1GMH", CONTENT_CODE, "2019");
+appState.Series1.b = getValue(apiData, "B1GMH", CONTENT_CODE, "2021");
+appState.Series1.c = getValue(apiData, "B1GMH", CONTENT_CODE, "2023");
+appState.Series2.a = getValue(apiData, "P3JK", CONTENT_CODE, "2019");
+appState.Series2.b = getValue(apiData, "P3JK", CONTENT_CODE, "2021");
+appState.Series2.c = getValue(apiData, "P3JK", CONTENT_CODE, "2023");
+appState.Series3.a = getValue(apiData, "EP", CONTENT_CODE, "2019");
+appState.Series3.b = getValue(apiData, "EP", CONTENT_CODE, "2021");
+appState.Series3.c = getValue(apiData, "EP", CONTENT_CODE, "2023");
 
   return {
     id: "2019-2023",
@@ -451,26 +550,26 @@ appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2023");
 
 async function fetchGov6() {
 // huom vain kaksi datasarjaa
-appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2023");
-appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2024");
+appState.Series1.a = getValue(apiData, "B1GMH", CONTENT_CODE, "2023");
+appState.Series1.b = getValue(apiData, "B1GMH", CONTENT_CODE, "2025");
 
-appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2023");
-appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2024");
+appState.Series2.a = getValue(apiData, "P3JK", CONTENT_CODE, "2023");
+appState.Series2.b = getValue(apiData, "P3JK", CONTENT_CODE, "2025");
 
-appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2023");
-appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2024");
+appState.Series3.a = getValue(apiData, "EP", CONTENT_CODE, "2023");
+appState.Series3.b = getValue(apiData, "EP", CONTENT_CODE, "2025");
 
 
   return {
     id: "2023-",
     name: "Orpo",
-    months: ["2023","2024",],
+    months: ["2023","2025",],
     series1: [appState.Series1.a,appState.Series1.b],
     series2: [appState.Series2.a,appState.Series2.b],
-    series3: [27803,29995],
+    series3: [27803,33113],
     infoText: "",
     pm: ": Nykyhallitus",
-    nickname: "Hallituskausi ei ole vielä päättynyt. Luvut 2024 loppuun. ",
+    nickname: "Hallituskausi ei ole vielä päättynyt. Luvut 2025 loppuun. ",
     hint: "Tiedätkö hallituspuolueet?",
     options: ["Kokoomus","SDP","Keskusta","Vihreät","RKP","KD","PS","Vasemmistoliitto", "Liike Nyt"],
     correctAnswers: ["Kokoomus","PS","RKP"]
@@ -478,27 +577,27 @@ appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2024");
 }
 // Koonti osion fetcheri sisältää muista poiketen eri osioiden muutoksia
 async function fetchSummary() {
-document.getElementById("meta").textContent = "Tunnusluvut alkaen 2003 Jäätteenmäki/Vanhanen - 2024 Orpo";
+document.getElementById("meta").textContent = "Tunnusluvut alkaen 2003 Jäätteenmäki/Vanhanen - 2025 Orpo";
 document.getElementById("clear").style.display = "none";
 
 
 document.getElementById("next").textContent = "Katso tulokset!";
 document.getElementById("options").style.display = "none";
 document.getElementById("info-box").style.display = "none";
-appState.Series1.a = getValue(apiData, "B1GMH", "cp_eur", "2003");
-appState.Series1.b = getValue(apiData, "B1GMH", "cp_eur", "2015");
-appState.Series1.c = getValue(apiData, "B1GMH", "cp_eur", "2024");
-appState.Series2.a = getValue(apiData, "P3JK", "cp_eur", "2003");
-appState.Series2.b = getValue(apiData, "P3JK", "cp_eur", "2015");
-appState.Series2.c = getValue(apiData, "P3JK", "cp_eur", "2024");
-appState.Series3.a = getValue(apiData, "EP", "cp_eur", "2003");
-appState.Series3.b = getValue(apiData, "EP", "cp_eur", "2015");
-appState.Series3.c = getValue(apiData, "EP", "cp_eur", "2024");
+appState.Series1.a = getValue(apiData, "B1GMH", CONTENT_CODE, "2003");
+appState.Series1.b = getValue(apiData, "B1GMH", CONTENT_CODE, "2015");
+appState.Series1.c = getValue(apiData, "B1GMH", CONTENT_CODE, "2025");
+appState.Series2.a = getValue(apiData, "P3JK", CONTENT_CODE, "2003");
+appState.Series2.b = getValue(apiData, "P3JK", CONTENT_CODE, "2015");
+appState.Series2.c = getValue(apiData, "P3JK", CONTENT_CODE, "2025");
+appState.Series3.a = getValue(apiData, "EP", CONTENT_CODE, "2003");
+appState.Series3.b = getValue(apiData, "EP", CONTENT_CODE, "2015");
+appState.Series3.c = getValue(apiData, "EP", CONTENT_CODE, "2025");
 
   return {
-    id: "2003-2023",
+    id: "2003-2025",
     name: "Yhteensä koko ajalta",
-    months: ["2003","2014","2024"],
+    months: ["2003","2014","2025"],
     series1: [appState.Series1.a,appState.Series1.b,appState.Series1.c],
     series2: [appState.Series2.a,appState.Series2.b,appState.Series2.c],
     series3: [12130.83,17373.76,29995],
@@ -804,7 +903,7 @@ function finishFlow() {
   const mainElem = document.getElementById('main');
   if (mainElem) mainElem.classList.add('final-mode');
   document.getElementById("gov-title").textContent = "Kiitos — yhteenveto alla";
-  document.getElementById("meta").textContent = "Tunnusluvut alkaen 2003 Jäätteenmäki/Vanhanen - 2024 Orpo";
+  document.getElementById("meta").textContent = "Tunnusluvut alkaen 2003 Jäätteenmäki/Vanhanen - 2025 Orpo";
   let score = 0;
 let maxPossible = 0;
 
